@@ -248,6 +248,8 @@ exports.getTeamByPlayer = (req, res) => {
 //returns all teams
 exports.getAllTeam = (req, res) => {
 	Team.find().exec((error, teams) => {
+		console.log(teams);
+		console.log(error);
 		if (error || !teams) {
 			return res.json({
 				error: error,
