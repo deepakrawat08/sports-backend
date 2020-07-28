@@ -17,7 +17,7 @@ app.use(cookieParser());
 app.use(cors());
 
  mongoose
-	.connect(process.env.DATABASE, {
+	.connect(process.env.MONGODB_URI || process.env.DATABASE, {
 		useNewUrlParser: true,
 		useCreateIndex: true,
 		useUnifiedTopology: true,
