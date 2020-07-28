@@ -27,14 +27,13 @@ mongoose
 		}
 	)
 	.then(() => {
+		const PORT = process.env.PORT || 8000;
 		console.log("DB CREATED");
+
+		app.use("/", auth);
+		app.use("/", user);
+		app.use("/", team);
+		app.use("/", individual);
+
+		app.listen(PORT, () => console.log(`Express running on ${PORT}`))
 	});
-
-app.use("/", auth);
-app.use("/", user);
-app.use("/", team);
-app.use("/", individual);
-
-const PORT = process.env.PORT || 8000;
-
-app.listen(PORT, () => console.log(`Express running on ${PORT}`));
