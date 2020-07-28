@@ -15,9 +15,7 @@ const individual = require('./routes/individual')
 app.use(bodyparser.json());
 app.use(cookieParser());
 app.use(cors());
-if (process.env.NODE_ENV==='production') {
-	
-}
+
  mongoose
 	.connect(process.env.MONGODB_URI || process.env.DATABASE, {
 		useNewUrlParser: true,
@@ -33,6 +31,6 @@ app.use("/", user);
 app.use("/", team);
 app.use('/', individual);
 
-const PORT = process.env.PORT || 8000;
+const PORT = process.env.DEBUG_PORT || 8000;
 
 app.listen(PORT, () => console.log(`Express running on ${PORT}`));
