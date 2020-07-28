@@ -30,6 +30,7 @@ app.use("/", auth);
 app.use("/", user);
 app.use("/", team);
 app.use('/', individual);
-const PORT = 8000;
+
+const PORT = process.env.PORT || 8000;
 
 app.listen(PORT, () => console.log(`Express running on ${PORT}`));
