@@ -11,17 +11,21 @@ const cookieParser = require("cookie-parser");
 const auth = require("./routes/auth");
 const user = require("./routes/user");
 const team = require("./routes/team");
-const individual = require('./routes/individual')
+const individual = require("./routes/individual");
 app.use(bodyparser.json());
 app.use(cookieParser());
 app.use(cors());
 
- mongoose
-	.connect( "mongodb+srv://deepak_rawat_07:Deepak07@mongodb@rawat.llerx.mongodb.net/sports?retryWrites=true&w=majority", {
-		useNewUrlParser: true,
-		useCreateIndex: true,
-		useUnifiedTopology: true,
-	})
+mongoose
+	.connect(
+		process.env.MONGODB_ENV ||
+			"mongodb+srv://deepak_rawat_07:Deepak07@mongodb@rawat.llerx.mongodb.net/sports?retryWrites=true&w=majority",
+		{
+			useNewUrlParser: true,
+			useCreateIndex: true,
+			useUnifiedTopology: true,
+		}
+	)
 	.then(() => {
 		console.log("DB CREATED");
 	});
@@ -29,7 +33,7 @@ app.use(cors());
 app.use("/", auth);
 app.use("/", user);
 app.use("/", team);
-app.use('/', individual);
+app.use("/", individual);
 
 const PORT = process.env.PORT || 8000;
 
