@@ -17,7 +17,7 @@ app.use(cookieParser());
 app.use(cors());
 
  mongoose
-	.connect(process.env.MONGODB_URI || process.env.DATABASE, {
+	.connect(process.env.MONGODB_URI || "mongodb+srv://deepak_rawat_07:Deepak07@mongodb@rawat.llerx.mongodb.net/sports?retryWrites=true&w=majority", {
 		useNewUrlParser: true,
 		useCreateIndex: true,
 		useUnifiedTopology: true,
