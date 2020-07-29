@@ -107,7 +107,7 @@ exports.addTeam = (req, res) => {
 // needs to fix bugs here ::::: done but need checks
 exports.getTeamByPlayer = (req, res) => {
 	const { teamCodes } = req.body;
-	
+
 	Team.aggregate([
 		{
 			$lookup: {
@@ -121,7 +121,9 @@ exports.getTeamByPlayer = (req, res) => {
 		let teams = result.filter((team) => {
 			return teamCodes.includes(team.teamCode);
 		});
-		
+		if (teams.length === 0) {
+			return res.json([]);
+		}
 		let allDbTeam = [];
 		teams.forEach((val, i) => {
 			let temp = [];
@@ -254,6 +256,9 @@ exports.getAllTeam = (req, res) => {
 			return res.json({
 				error: error,
 			});
+		}
+		if (teams.length === 0) {
+			return res.json({ teams: [] });
 		}
 		let allDbTeam = [];
 		teams.forEach((team, iTeam) => {
