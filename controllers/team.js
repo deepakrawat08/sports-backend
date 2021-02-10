@@ -61,7 +61,7 @@ exports.addTeam = async (req, res) => {
 								teamCode: team.teamCode,
 								game: team.game,
 							});
-							User.updateOne(
+							User.findOneAndUpdate(
 								{ rollNumber: userVal.rollNumber },
 								{ $set: userVal },
 								(err, user) => {
@@ -72,6 +72,8 @@ exports.addTeam = async (req, res) => {
 											),
 										});
 									}
+									console.log(user);
+									console.log(err);
 									let updatedUser = {
 										name:
 											user.firstName +
@@ -81,7 +83,7 @@ exports.addTeam = async (req, res) => {
 										branch: user.branch,
 										year: user.year,
 									};
-
+									console.log(updatedUser);
 									teamPlayersArray.push(updatedUser);
 								}
 							);
@@ -114,6 +116,7 @@ exports.addTeam = async (req, res) => {
 											});
 										}
 
+										console.log(teamPlayersArray);
 										return res.json({
 											regNo: team.regNo,
 											teamCode: team.teamCode,
@@ -214,6 +217,7 @@ exports.getTeamByPlayer = (req, res) => {
 							allDbTeam.push(customTeam);
 
 							if (allDbTeam.length === teams.length) {
+								console.log(allDbTeam);
 								return res.json(allDbTeam);
 							}
 						}
