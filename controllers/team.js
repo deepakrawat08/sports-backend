@@ -1,14 +1,17 @@
 const Team = require("../models/team");
 const User = require("../models/user");
-const { resolve } = require("path");
-const { DH_CHECK_P_NOT_SAFE_PRIME } = require("constants");
-const { triggerAsyncId } = require("async_hooks");
+const createError = require("http-error");
 
-exports.addTeam = (req, res) => {
-	const { teamCaptain, year, game, teamPlayers } = req.body;
+exports.addTeam = async (req, res) => {
+	const { teamCaptain, year, game } = req.body;
 	Team.find({ year: year, game: game }, (err, teams) => {
+		if (err) {
+			return res.json({
+				error: new createError.InternalServerError(err),
+			});
+		}
 		let maxTeamCount = 0;
-		teams.forEach((team, index) => {
+		teams.forEach((team) => {
 			let teamIndex = Number(team.teamCode.slice(4));
 			if (teamIndex > maxTeamCount) {
 				maxTeamCount = teamIndex;
@@ -24,12 +27,12 @@ exports.addTeam = (req, res) => {
 		Team.find({}, (err, teams) => {
 			if (err) {
 				return res.json({
-					error:
-						"Something went wrong. Try again later(generating regNo failed)",
+					error: new createError.InternalServerError(err),
 				});
 			}
 			let maxRegNo = 0;
-			teams.forEach((team, i) => {
+
+			teams.forEach((team) => {
 				if (maxRegNo < team.regNo.slice(1)) {
 					maxRegNo = Number(team.regNo.slice(1));
 				}
@@ -37,15 +40,21 @@ exports.addTeam = (req, res) => {
 			regNo = "T" + Number(maxRegNo + 1);
 
 			team.regNo = regNo;
-			console.log(team);
 
 			team.save((err, team) => {
 				if (err) {
-					return res.json({ error: err._message });
+					return res.json({
+						error: new createError.InternalServerError(err),
+					});
 				}
 				User.find(
 					{ rollNumber: { $in: team.teamPlayers } },
 					(err, teamMember) => {
+						if (err) {
+							return res.json({
+								error: new createError.InternalServerError(err),
+							});
+						}
 						let teamPlayersArray = [];
 						teamMember.forEach((userVal) => {
 							userVal.participate.push({
@@ -56,46 +65,68 @@ exports.addTeam = (req, res) => {
 								{ rollNumber: userVal.rollNumber },
 								{ $set: userVal },
 								(err, user) => {
-									console.log(err);
-									console.log(user);
+									if (err) {
+										return res.json({
+											error: new createError.InternalServerError(
+												err
+											),
+										});
+									}
+									let updatedUser = {
+										name:
+											user.firstName +
+											" " +
+											user.lastName,
+										rollNo: user.rollNumber,
+										branch: user.branch,
+										year: user.year,
+									};
+
+									teamPlayersArray.push(updatedUser);
 								}
 							);
-							let user = {
-								name:
-									userVal.firstName + " " + userVal.lastName,
-								rollNo: userVal.rollNumber,
-								branch: userVal.branch,
-								year: userVal.year,
-							};
-
-							teamPlayersArray.push(user);
 						});
 						User.findOne(
 							{ rollNumber: teamCaptain },
 							(error, user) => {
+								if (error) {
+									return res.json({
+										error: new createError.InternalServerError(
+											error
+										),
+									});
+								}
+
 								user.participate.push({
 									teamCode: team.teamCode,
 									game: team.game,
 								});
+
 								User.updateOne(
 									{ rollNumber: user.rollNumber },
 									{ $set: user },
 									(error, response) => {
-										console.log(response);
-										console.log(error);
+										if (error) {
+											return res.json({
+												error: new createError.InternalServerError(
+													error
+												),
+											});
+										}
+
+										return res.json({
+											regNo: team.regNo,
+											teamCode: team.teamCode,
+											teamCaptain:
+												user.firstName +
+												" " +
+												user.lastName,
+											year: team.year,
+											game: team.game,
+											teamPlayers: teamPlayersArray,
+										});
 									}
 								);
-								let captainFullName =
-									user.firstName + " " + user.lastName;
-
-								return res.json({
-									regNo: team.regNo,
-									teamCode: team.teamCode,
-									teamCaptain: captainFullName,
-									year: team.year,
-									game: team.game,
-									teamPlayers: teamPlayersArray,
-								});
 							}
 						);
 					}
@@ -118,6 +149,11 @@ exports.getTeamByPlayer = (req, res) => {
 			},
 		},
 	]).exec((err, result) => {
+		if (err || !result) {
+			return res.json({
+				error: "Something went wrong. Please try again later!",
+			});
+		}
 		let teams = result.filter((team) => {
 			return teamCodes.includes(team.teamCode);
 		});
@@ -139,8 +175,21 @@ exports.getTeamByPlayer = (req, res) => {
 
 			User.findOne({ rollNumber: val.teamCaptain }).exec(
 				(err, captain) => {
+					if (err || !captain) {
+						return res.json({
+							error:
+								"Something went wrong. Please try again later!",
+						});
+					}
 					User.findOne({ rollNumber: val.approvedBy }).exec(
 						(err, profile) => {
+							if (err) {
+								console.log(val.approvedBy);
+								return res.json({
+									error:
+										"Something went wrong. Please try again later!",
+								});
+							}
 							let customTeam = {
 								teamRegNo: val.regNo,
 								teamCode: val.teamCode,
@@ -153,6 +202,7 @@ exports.getTeamByPlayer = (req, res) => {
 								teamYear: val.year,
 								teamGame: val.game,
 								teamCreatedAt: val.createdAt,
+								status: val.approved,
 							};
 							if (profile) {
 								customTeam.approvedByName =
@@ -253,19 +303,32 @@ exports.getAllTeam = (req, res) => {
 		console.log(teams);
 		console.log(error);
 		if (error || !teams) {
-			return res.json({
-				error: error,
-			});
+			if (!teams) {
+				return res.json({
+					error: new createError.NotFound("No team found"),
+				});
+			} else {
+				return res.json({
+					error: new createError.InternalServerError(err),
+				});
+			}
 		}
 		if (teams.length === 0) {
 			return res.json({ teams: [] });
 		}
 		let allDbTeam = [];
+
 		teams.forEach((team, iTeam) => {
 			User.findOne({ _id: team.teamCaptain }, (error, captain) => {
 				let temp = [];
 				team.teamPlayers.forEach((playerId, iPlayer) => {
 					User.findOne({ _id: playerId }).exec((error, user) => {
+						if (error || !user) {
+							return res.json({
+								error:
+									"Something went wrong. Please try again later!",
+							});
+						}
 						let teamPlayer = {
 							playerName: user.firstName + " " + user.lastName,
 							playerRollNo: user.rollNumber,
@@ -316,12 +379,28 @@ exports.getAllApprovedTeam = (req, res) => {
 				as: "players",
 			},
 		},
-	]).exec((err, result) => {
+	]).exec(async (err, result) => {
+		if (err || !result) {
+			if (!result) {
+				return res.json({
+					error: new createError.NotFound("No team found"),
+				});
+			} else {
+				return res.json({
+					error: new createError.InternalServerError(err),
+				});
+			}
+		}
 		let teams = result.filter((team) => {
 			return team.approved === "a";
 		});
+		if (teams.length === 0) {
+			return res.json({ teams: [] });
+		}
 		let allDbTeam = [];
-		teams.forEach((val) => {
+
+		console.log("_------1-----before");
+		await teams.forEach((val) => {
 			let temp = [];
 			val.players.forEach((user) => {
 				let teamPlayer = {
@@ -367,6 +446,8 @@ exports.getAllApprovedTeam = (req, res) => {
 				}
 			);
 		});
+
+		console.log("_-------2----before");
 	});
 };
 
@@ -379,12 +460,16 @@ exports.updateTeamStatus = (req, res) => {
 		{ teamCode: teamCode },
 		{ $set: { approved: status, approvedBy: coordinator } },
 		(error, response) => {
-			console.log(error);
-			console.log(response);
-			if (error) {
-				return res.json({
-					error: error,
-				});
+			if (error || !response) {
+				if (!response) {
+					return res.json({
+						error: new createError.NotFound("No team found"),
+					});
+				} else {
+					return res.json({
+						error: new createError.InternalServerError(error),
+					});
+				}
 			}
 			if (status === "a") {
 				return res.json({
@@ -411,11 +496,28 @@ exports.getAllTeamByStatus = (req, res) => {
 			},
 		},
 	]).exec((err, result) => {
+		if (err || !result) {
+			if (!result) {
+				return res.json({
+					error: new createError.NotFound("No team found"),
+				});
+			} else {
+				return res.json({
+					error: new createError.InternalServerError(err),
+				});
+			}
+		}
 		let teams = result.filter((team) => {
 			return team.approved === status;
 		});
+
+		if (teams.length === 0) {
+			return res.json([]);
+		}
+
 		let allDbTeam = [];
-		teams.forEach((val, i) => {
+
+		teams.forEach((val) => {
 			let temp = [];
 			val.players.forEach((user) => {
 				let teamPlayer = {
@@ -429,8 +531,23 @@ exports.getAllTeamByStatus = (req, res) => {
 
 			User.findOne({ rollNumber: val.teamCaptain }).exec(
 				(err, captain) => {
+					if (err) {
+						return res.json({
+							error:
+								"Something went wrong. Please try again later!",
+						});
+					}
+					//find profile of coordinator
 					User.findOne({ rollNumber: val.approvedBy }).exec(
 						(err, profile) => {
+							console.log(profile);
+							console.log(err);
+							if (err) {
+								return res.json({
+									error:
+										"Something went wrong. Please try again later!",
+								});
+							}
 							let customTeam = {
 								teamRegNo: val.regNo,
 								teamCode: val.teamCode,
@@ -464,7 +581,7 @@ exports.getAllTeamByStatus = (req, res) => {
 	});
 };
 //Only for coordinators, and gives result on basis of status and coordinator's game
-exports.getAllTeamByStatusa = (req, res) => {
+exports.getAllTeamByStatusForCoordinator = (req, res) => {
 	const { status, game } = req.body;
 	Team.aggregate([
 		{
@@ -476,6 +593,18 @@ exports.getAllTeamByStatusa = (req, res) => {
 			},
 		},
 	]).exec((err, result) => {
+		if (err || !result) {
+			if (!result) {
+				return res.json({
+					error: new createError.NotFound("No team found"),
+				});
+			} else {
+				return res.json({
+					error: new createError.InternalServerError(err),
+				});
+			}
+		}
+
 		let teams = result.filter((team) => {
 			return team.approved === status && team.game === game;
 		});
@@ -483,8 +612,10 @@ exports.getAllTeamByStatusa = (req, res) => {
 		if (teams.length === 0) {
 			return res.json([]);
 		}
+
 		let allDbTeam = [];
-		teams.forEach((val, i) => {
+
+		teams.forEach((val) => {
 			let temp = [];
 			val.players.forEach((user) => {
 				let teamPlayer = {
@@ -498,8 +629,20 @@ exports.getAllTeamByStatusa = (req, res) => {
 
 			User.findOne({ rollNumber: val.teamCaptain }).exec(
 				(err, captain) => {
+					if (err) {
+						return res.json({
+							error:
+								"Something went wrong. Please try again later!",
+						});
+					}
 					User.findOne({ rollNumber: val.approvedBy }).exec(
 						(err, profile) => {
+							if (err) {
+								return res.json({
+									error:
+										"Something went wrong. Please try again later!",
+								});
+							}
 							let customTeam = {
 								teamRegNo: val.regNo,
 								teamCode: val.teamCode,

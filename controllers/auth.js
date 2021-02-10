@@ -2,6 +2,7 @@ const User = require("../models/user");
 const jwt = require("jsonwebtoken");
 const expressjwt = require("express-jwt");
 const { check, validationResult } = require("express-validator");
+const createError = require("http-error");
 // const redi  = require('jwt-redis')
 
 //Sign Up controller
@@ -9,28 +10,20 @@ exports.signUp = (req, res) => {
 	//for checking validation result form request
 	const errors = validationResult(req);
 	if (!errors.isEmpty()) {
-		console.log(errors);
-		return res.status(422).json({
-			error: errors.array()[0].msg,
+		return res.json({
+			error: new createError.BadRequest(errors.array()[0].msg),
 		});
 	}
-
 	//creating user object with information provided by request body
 	const user = new User(req.body);
 	user.save((err, user) => {
-		console.log(user);
-		console.log(err);
-
 		if (err) {
-			console.log(err);
-			return res.status(400).json({
-				error:
-					"Used information are already saved in database. Please enter correct information",
+			return res.json({
+				error: `${req.body.rollNumber} is already registered. Please enter valid credentials.`,
 			});
 		}
 		console.log(user);
-
-		res.json({
+		return res.json({
 			_id: user._id,
 			firstName: user.firstName,
 			lastName: user.lastName,
@@ -42,6 +35,7 @@ exports.signUp = (req, res) => {
 		});
 	});
 };
+
 //Sign In controller
 exports.signin = (req, res) => {
 	const { email, password } = req.body;
@@ -50,22 +44,31 @@ exports.signin = (req, res) => {
 	const errors = validationResult(req);
 	if (!errors.isEmpty()) {
 		console.log(errors);
-		return res.status(422).json({
-			error: errors.array()[0].msg,
+		return res.json({
+			error: new createError.BadRequest(errors.array()[0].msg),
 		});
 	}
 
 	//checking the user information in db
-	User.findOne({ email }, (error, user) => {
+	User.findOne({ email: email }, (error, user) => {
+		console.log(error);
 		if (error || !user) {
-			return res.json({
-				error: `${email} is not registered.`,
-			});
+			if (!user) {
+				return res.json({
+					error: new createError.NotFound(
+						"Username is not registered"
+					),
+				});
+			} else {
+				return res.json({
+					error: error,
+				});
+			}
 		}
 		//check passowrd matched or not
 		if (!user.authenticate(password)) {
 			return res.json({
-				error: "password did not match",
+				error: new createError.Unauthorized("wrong password"),
 			});
 		}
 		//creating token using jwt(jsonwebtoken)
@@ -82,7 +85,7 @@ exports.signin = (req, res) => {
 				year: user.year,
 				email: user.email,
 				mobileNo: user.mobileNo,
-				role: user.role
+				role: user.role,
 			},
 		});
 	});
@@ -105,12 +108,13 @@ exports.isSignedIn = expressjwt({
 	secret: process.env.SECRET,
 	userProperty: "auth",
 });
+
 //isAdmin middleware
 //check if user role is 0, if yes, send "not admin", else procced next()
 exports.isAdmin = (req, res, next) => {
 	if (req.profile.role === 0) {
-		return res.status(403).json({
-			error: "Not Admin",
+		return res.json({
+			error: new createError.Unauthorized("Not Admin"),
 		});
 	}
 	next();
@@ -121,7 +125,7 @@ exports.isAuthenticated = (req, res, next) => {
 	const check = req.profile && req.auth && req.profile._id && req.auth._id;
 	if (!check) {
 		return res.status(403).json({
-			error: "Access Denied",
+			error: new createError.Unauthorized("Access Denied"),
 		});
 	}
 	next();

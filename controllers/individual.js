@@ -1,17 +1,16 @@
 const Individual = require("../models/individual");
 const individual = require("../models/individual");
 const User = require("../models/user");
+const createError = require("http-error");
 
 exports.individualRegistration = (req, res) => {
 	const { userId, rollNumber, game } = req.body;
-	console.log(req.body);
 
 	let regNo = "";
 	Individual.find({}, (err, players) => {
 		if (err) {
 			return res.json({
-				error:
-					"Something went wrong. Try again later(generating regNo failed)",
+				error: new createError.InternalServerError(err),
 			});
 		}
 		let maxRegNo = 0;
@@ -23,25 +22,41 @@ exports.individualRegistration = (req, res) => {
 		regNo = "I" + Number(maxRegNo + 1);
 
 		const individualReg = new Individual();
+
 		individualReg.regNo = regNo;
 		individualReg.userId = userId;
 		individualReg.rollNumber = rollNumber;
 		individualReg.game = game;
 
+		//check if already exist with same userId, rollNumber and game
 		Individual.findOne(
 			{ userId: userId, rollNumber: rollNumber, game: game },
 			(err, playerIReg) => {
-				if (err || !playerIReg) {
+				if (err) {
+					return res.json({
+						error: new createError.InternalServerError(err),
+					});
+				}
+				if (!playerIReg) {
 					individualReg.save((error, player) => {
 						if (error) {
 							return res.json({
-								error: "Not able to save registration:" + error,
+								error: new createError.InternalServerError(
+									error
+								),
 							});
 						}
 
 						User.findOne(
 							{ rollNumber: rollNumber },
 							(err, user) => {
+								if (err) {
+									return res.json({
+										error: new createError.InternalServerError(
+											err
+										),
+									});
+								}
 								user.participate.push({
 									regNo: player.regNo,
 									game: player.game,
@@ -50,8 +65,13 @@ exports.individualRegistration = (req, res) => {
 									{ rollNumber: user.rollNumber },
 									{ $set: user },
 									(error, response) => {
-										console.log(response);
-										console.log(error);
+										if (error) {
+											return res.json({
+												error: new createError.InternalServerError(
+													error
+												),
+											});
+										}
 										return res.json({
 											regNo: player.regNo,
 											userId:
@@ -77,6 +97,7 @@ exports.individualRegistration = (req, res) => {
 		);
 	});
 };
+
 const getGameName = (game) => {
 	switch (game) {
 		case "CR": {
@@ -115,22 +136,17 @@ exports.getIndividualPlayerByRollNo = (req, res) => {
 	]).exec((error, individuals) => {
 		if (error || !individuals) {
 			return res.json({
-				error: "Something went wrong. Please try again later!",
+				error: new createError.InternalServerError(error),
 			});
 		}
-		if (individuals.length === 0) {
-			return res.json({
-				error: "No Record found",
-			});
-		}
+
 		let individualsArray = individuals.filter((individual) => {
 			return individual.rollNumber === rollNo;
 		});
 
-		console.log(individualsArray.length);
 		if (individualsArray.length === 0) {
 			return res.json({
-				error: "No Record Found",
+				error: "No Record found",
 			});
 		}
 		// console.log(individualsArray);
@@ -142,8 +158,7 @@ exports.getIndividualPlayerByRollNo = (req, res) => {
 				(err, profile) => {
 					if (err) {
 						return res.json({
-							error:
-								"Something went wrong. Please try again later!",
+							error: new createError.InternalServerError(err),
 						});
 					}
 					let temp = {
@@ -158,8 +173,6 @@ exports.getIndividualPlayerByRollNo = (req, res) => {
 						game: individual.game,
 						status: individual.approved,
 					};
-					// console.log(temp);
-					// console.log(temp);
 
 					if (profile) {
 						temp.approvedByName =
@@ -193,10 +206,12 @@ exports.getAllIndividualReg = (req, res) => {
 	]).exec((error, individuals) => {
 		if (error || !individuals) {
 			return res.json({
-				error: "Something went wrong. Please try again later!",
+				error: new createError.InternalServerError(error),
 			});
 		}
-
+		if (individuals.length === 0) {
+			return res.json({ individualRegs: [] });
+		}
 		// console.log(individualsArray);
 		let allIndividual = [];
 		individuals.forEach((individual) => {
@@ -206,8 +221,7 @@ exports.getAllIndividualReg = (req, res) => {
 				(err, profile) => {
 					if (err) {
 						return res.json({
-							error:
-								"Something went wrong. Please try again later!",
+							error: new createError.InternalServerError(err),
 						});
 					}
 					let temp = {
@@ -267,13 +281,16 @@ exports.getAllApprovedIndividualReg = (req, res) => {
 	]).exec((error, individuals) => {
 		if (error || !individuals) {
 			return res.json({
-				error: "Something went wrong. Please try again later!",
+				error: new createError.InternalServerError(error),
 			});
 		}
 		let individualsArray = individuals.filter((individual) => {
 			return individual.approved === "a";
 		});
-
+		console.log(individualsArray);
+		if (individualsArray.length === 0) {
+			return res.json({ individualRegs: [] });
+		}
 		// console.log(individualsArray);
 		let allIndividual = [];
 		individualsArray.forEach((individual) => {
@@ -283,8 +300,7 @@ exports.getAllApprovedIndividualReg = (req, res) => {
 				(err, profile) => {
 					if (err) {
 						return res.json({
-							error:
-								"Something went wrong. Please try again later!",
+							error: new createError.InternalServerError(err),
 						});
 					}
 					let temp = {
@@ -300,8 +316,6 @@ exports.getAllApprovedIndividualReg = (req, res) => {
 						approved: individual.approved,
 						createdAt: individual.createdAt,
 					};
-					// console.log(temp);
-					// console.log(temp);
 
 					if (profile) {
 						temp.approvedByName =
@@ -333,15 +347,18 @@ exports.getAllIndividualByStatus = (req, res) => {
 			},
 		},
 	]).exec((error, individuals) => {
-		if (error || !individuals) {
+		if (error) {
 			return res.json({
-				error: "Something went wrong. Please try again later!",
+				error: new createError.InternalServerError(error),
 			});
 		}
 		let individualsArray = individuals.filter((individual) => {
 			return individual.approved === status;
 		});
 
+		if (individualsArray.length === 0) {
+			return res.json([]);
+		}
 		// console.log(individualsArray);
 		let allIndividual = [];
 		individualsArray.forEach((individual) => {
@@ -351,8 +368,7 @@ exports.getAllIndividualByStatus = (req, res) => {
 				(err, profile) => {
 					if (err) {
 						return res.json({
-							error:
-								"Something went wrong. Please try again later!",
+							error: new createError.InternalServerError(err),
 						});
 					}
 					let temp = {
@@ -384,38 +400,6 @@ exports.getAllIndividualByStatus = (req, res) => {
 			);
 		});
 	});
-	// Individual.find({ approved: status }).exec((error, individualRegs) => {
-	// 	if (error || !individualRegs) {
-	// 		return res.json({
-	// 			error: error,
-	// 		});
-	// 	}
-
-	// 	if (individualRegs.length === 0) {
-	// 		return res.json([]);
-	// 	}
-	// 	let players = [];
-	// 	individualRegs.forEach((player, iPlayer) => {
-	// 		User.findOne({ _id: player.userId }).exec((err, user) => {
-	// 			let customPlayer = {
-	// 				playerRegNo: player.regNo,
-	// 				playerName: user.firstName + " " + user.lastName,
-	// 				playerRollNo: player.rollNumber,
-	// 				playeryear: user.year,
-	// 				playerBranch: user.branch,
-	// 				playerGame: player.game,
-	// 				approved: player.approved,
-	// 				createdAt: player.createdAt,
-	// 			};
-
-	// 			players.push(customPlayer);
-
-	// 			if (iPlayer == individualRegs.length - 1) {
-	// 				return res.json(players);
-	// 			}
-	// 		});
-	// 	});
-	// });
 };
 
 //Only for coordinators, and gives result on basis of status and coordinator's game
@@ -432,15 +416,18 @@ exports.getAllIndividualByStatusAndCoord = (req, res) => {
 			},
 		},
 	]).exec((error, individuals) => {
-		if (error || !individuals) {
+		if (error) {
 			return res.json({
-				error: "Something went wrong. Please try again later!",
+				error: new createError.InternalServerError(error),
 			});
 		}
 		let individualsArray = individuals.filter((individual) => {
 			return individual.approved === status && individual.game === game;
 		});
 
+		if (individualsArray.length === 0) {
+			return res.json([]);
+		}
 		// console.log(individualsArray);
 		let allIndividual = [];
 		individualsArray.forEach((individual) => {
@@ -451,7 +438,7 @@ exports.getAllIndividualByStatusAndCoord = (req, res) => {
 					if (err) {
 						return res.json({
 							error:
-								"Something went wrong. Please try again later!",
+							new createError.InternalServerError(err)
 						});
 					}
 					let temp = {
@@ -483,56 +470,19 @@ exports.getAllIndividualByStatusAndCoord = (req, res) => {
 			);
 		});
 	});
-	// Individual.find({ approved: status, game: game }).exec(
-	// 	(error, individualRegs) => {
-	// 		if (error || !individualRegs) {
-	// 			return res.json({
-	// 				error: error,
-	// 			});
-	// 		}
-	// 		console.log(individualRegs);
-	// 		if (individualRegs.length === 0) {
-	// 			return res.json([]);
-	// 		}
-	// 		let players = [];
-	// 		individualRegs.forEach((player, iPlayer) => {
-	// 			User.findOne({ _id: player.userId }).exec((err, user) => {
-	// 				let customPlayer = {
-	// 					playerRegNo: player.regNo,
-	// 					playerName: user.firstName + " " + user.lastName,
-	// 					playerRollNo: player.rollNumber,
-	// 					playeryear: user.year,
-	// 					playerBranch: user.branch,
-	// 					playerGame: player.game,
-	// 					approved: player.approved,
-	// 					createdAt: player.createdAt,
-	// 				};
-
-	// 				players.push(customPlayer);
-
-	// 				if (iPlayer == individualRegs.length - 1) {
-	// 					return res.json(players);
-	// 				}
-	// 			});
-	// 		});
-	// 	}
-	// );
 };
 
 //for both admin and coordinator and used to update status of individual registration
 exports.updateIndividualStatus = (req, res) => {
-	console.log(req.body);
 	const { status, regNo, coordinator } = req.body;
 
 	Individual.updateOne(
 		{ regNo: regNo },
 		{ $set: { approved: status, approvedBy: coordinator } }
 	).exec((error, response) => {
-		console.log(error);
-		console.log(response);
 		if (error) {
 			return res.json({
-				error: error,
+				error:  new createError.InternalServerError(error),
 			});
 		}
 		if (status === "a") {
